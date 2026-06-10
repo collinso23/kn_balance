@@ -1,7 +1,7 @@
 """
 kn_explorer.py — Complete graphs on a circle: visualizer + analysis toolkit.
 
-Companion artifact to PAPER.md ("Navigating Conceptual Space").
+Companion artifact to kn_edge_class_balance.md ("Navigating Conceptual Space").
 Extends the original animate_complete_graphs() with:
 
   1. Edge-class taxonomy: adjacent / antipodal / inner
@@ -113,10 +113,9 @@ def cmd_stats(n_min, n_max):
         mark = "<== inner = adjacent" if c["balanced"] else ""
         print(f"{c['n']:>3} {c['total']:>6} {c['adjacent']:>9} "
               f"{c['antipodal']:>10} {c['inner']:>6} {c['crossings']:>8}  {mark}")
-    print("\nTheorem check: balance occurs only at n=5 (odd) and n=6 (even).")
     balanced = [n for n in range(3, 10_001) if edge_counts(n)["balanced"]]
-    print(f"Scan n=3..10000: balanced at {balanced}  "
-          f"({'PASS' if balanced == [5, 6] else 'FAIL'})")
+    result = "PASS — only n=5 (odd), n=6 (even)" if balanced == [5, 6] else "FAIL"
+    print(f"\nTheorem scan n=3..10000: balanced at {balanced}  ({result})")
 
 
 def cmd_show(n, mode):
@@ -167,18 +166,27 @@ def main():
                    help="3-panel inversion stress test for K_N")
     p.add_argument("--animate", nargs=2, type=int, metavar=("MIN", "MAX"),
                    help="animate K_MIN through K_MAX")
+    p.add_argument("--interval", type=int, default=None, metavar="MS",
+                   help="animation frame interval in ms (default: 600, only applies with --animate)")
     args = p.parse_args()
 
-    if args.stats:
-        cmd_stats(*args.stats)
-    elif args.show:
-        cmd_show(args.show, args.mode)
-    elif args.inversion:
-        cmd_inversion(args.inversion)
-    elif args.animate:
-        cmd_animate(*args.animate)
-    else:
-        cmd_stats(3, 16)  # sensible default
+    if args.interval is not None and not args.animate:
+        p.error("--interval only applies with --animate")
+
+    try:
+        if args.stats:
+            cmd_stats(*args.stats)
+        elif args.show:
+            cmd_show(args.show, args.mode)
+        elif args.inversion:
+            cmd_inversion(args.inversion)
+        elif args.animate:
+            cmd_animate(*args.animate, interval=args.interval or 600)
+        else:
+            cmd_stats(3, 16)  # sensible default
+    except KeyboardInterrupt:
+        plt.close("all")
+        print("\nInterrupted.")
 
 
 if __name__ == "__main__":
