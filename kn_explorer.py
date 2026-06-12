@@ -15,6 +15,7 @@ Usage:
   python kn_explorer.py --show 6 --mode noanti    # inversion test panel
   python kn_explorer.py --animate 3 12        # original animation, class-colored
   python kn_explorer.py --inversion 6         # 3-panel stress test for one n
+  python kn_explorer.py --animate-inversion 3 12  # animated 3-panel stress test
 """
 
 import argparse
@@ -124,18 +125,40 @@ def cmd_show(n, mode):
     plt.show()
 
 
+INVERSION_PANELS = [
+    ("full", "full K_n"),
+    ("noanti", "antipodal removed"),
+    ("antionly", "antipodal only"),
+]
+INVERSION_SUPTITLE = "Inversion stress test: is antipodality the mechanism?"
+
+
 def cmd_inversion(n):
     """The §3.3 stress test: full / antipodal-removed / antipodal-only."""
     fig, axes = plt.subplots(1, 3, figsize=(13, 4.5))
-    for ax, mode, label in zip(
-        axes,
-        ["full", "noanti", "antionly"],
-        ["full K_n", "antipodal removed", "antipodal only"],
-    ):
+    for ax, (mode, label) in zip(axes, INVERSION_PANELS):
         draw_kn(ax, n, mode, title=f"{label} (n={n})")
-    fig.suptitle("Inversion stress test: is antipodality the mechanism?", fontsize=11)
+    fig.suptitle(INVERSION_SUPTITLE, fontsize=11)
     plt.tight_layout()
     plt.show()
+
+
+def cmd_animate_inversion(n_min, n_max, interval=600):
+    """Animated §3.3 stress test: the three panels evolve side by side over n."""
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4.5))
+    fig.suptitle(INVERSION_SUPTITLE, fontsize=11)
+
+    def update(frame):
+        n = n_min + (frame % (n_max - n_min + 1))
+        for ax, (mode, label) in zip(axes, INVERSION_PANELS):
+            ax.clear()
+            draw_kn(ax, n, mode, title=f"{label} (n={n})")
+
+    anim = FuncAnimation(fig, update, frames=n_max - n_min + 1,
+                         interval=interval, repeat=True)
+    plt.tight_layout()
+    plt.show()
+    return anim
 
 
 def cmd_animate(n_min, n_max, interval=600):
@@ -166,12 +189,15 @@ def main():
                    help="3-panel inversion stress test for K_N")
     p.add_argument("--animate", nargs=2, type=int, metavar=("MIN", "MAX"),
                    help="animate K_MIN through K_MAX")
+    p.add_argument("--animate-inversion", nargs=2, type=int, metavar=("MIN", "MAX"),
+                   help="animated 3-panel inversion test for K_MIN through K_MAX")
     p.add_argument("--interval", type=int, default=None, metavar="MS",
-                   help="animation frame interval in ms (default: 600, only applies with --animate)")
+                   help="animation frame interval in ms (default: 600, "
+                        "only applies with --animate/--animate-inversion)")
     args = p.parse_args()
 
-    if args.interval is not None and not args.animate:
-        p.error("--interval only applies with --animate")
+    if args.interval is not None and not (args.animate or args.animate_inversion):
+        p.error("--interval only applies with --animate or --animate-inversion")
 
     try:
         if args.stats:
@@ -182,6 +208,8 @@ def main():
             cmd_inversion(args.inversion)
         elif args.animate:
             cmd_animate(*args.animate, interval=args.interval or 600)
+        elif args.animate_inversion:
+            cmd_animate_inversion(*args.animate_inversion, interval=args.interval or 600)
         else:
             cmd_stats(3, 16)  # sensible default
     except KeyboardInterrupt:

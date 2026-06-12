@@ -25,6 +25,7 @@ python kn_explorer.py --stats 3 20      # edge-class table + balance theorem che
 python kn_explorer.py --inversion 6     # the 3-panel stress test from §3.3
 python kn_explorer.py --show 5          # static K_5 with edge classes colored
 python kn_explorer.py --animate 3 12    # the original animation
+python kn_explorer.py --animate-inversion 3 12  # the §3.3 panels, animated over n
 ```
 
 ## Status
