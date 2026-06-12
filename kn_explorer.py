@@ -16,12 +16,16 @@ Usage:
   python kn_explorer.py --animate 3 12        # original animation, class-colored
   python kn_explorer.py --inversion 6         # 3-panel stress test for one n
   python kn_explorer.py --animate-inversion 3 12  # animated 3-panel stress test
+  python kn_explorer.py --animate 3 12 --smooth   # smooth morphing between n values
+  python kn_explorer.py --animate-inversion 3 12 --smooth --save morph.gif
 """
 
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
+from matplotlib.animation import FuncAnimation, PillowWriter, FFMpegWriter
+from matplotlib.collections import LineCollection
+from matplotlib.colors import to_rgba
 
 # ---------------------------------------------------------------- taxonomy
 
@@ -79,6 +83,13 @@ MODES = {
 }
 
 
+def kn_title(n):
+    """Default panel title: class counts plus the balance flag."""
+    c = edge_counts(n)
+    flag = "  [BALANCED]" if c["balanced"] else ""
+    return f"K_{n}  adj={c['adjacent']} anti={c['antipodal']} inner={c['inner']}{flag}"
+
+
 def draw_kn(ax, n, mode="full", title=None):
     """Draw K_n on ax with edge-class coloring, filtered by mode."""
     keep = MODES[mode]
@@ -95,10 +106,142 @@ def draw_kn(ax, n, mode="full", title=None):
     ax.set_aspect("equal")
     ax.axis("off")
     if title is None:
-        c = edge_counts(n)
-        flag = "  [BALANCED]" if c["balanced"] else ""
-        title = f"K_{n}  adj={c['adjacent']} anti={c['antipodal']} inner={c['inner']}{flag}"
+        title = kn_title(n)
     ax.set_title(title, fontsize=10)
+
+
+# ---------------------------------------------------------------- morphing
+
+CLASS_RGBA = {cls: to_rgba(s["color"], s["alpha"]) for cls, s in STYLE.items()}
+CLASS_LW = {cls: s["linewidth"] for cls, s in STYLE.items()}
+VERTEX_RGBA = to_rgba("#534AB7")
+
+MORPH_HOLD = 8    # default frames held at each integer n
+MORPH_STEPS = 14  # default frames per K_n -> K_{n+1} transition
+
+
+def _smoothstep(t):
+    return t * t * (3.0 - 2.0 * t)
+
+
+def morph_frame(n, t, mode="full"):
+    """Segments, per-edge RGBA/linewidths, and vertex data for the K_n -> K_{n+1}
+    morph at time t in [0, 1).
+
+    Vertex k sits at angle 2*pi*k/(n + t): t=0 is exactly K_n (the extra vertex
+    coincides with vertex 0), t -> 1 approaches K_{n+1}, so the new vertex buds
+    off the top and every other vertex glides to its new slot. Edges whose class
+    differs between the two graphs crossfade styles; edges incident to the
+    budding vertex fade in with t. Mode filtering folds into alpha, so filtered
+    classes dissolve rather than pop.
+    """
+    keep = MODES[mode]
+    m = n if t <= 0 else n + 1
+    angles = 2 * np.pi * np.arange(m) / (n + t) - np.pi / 2
+    xs, ys = np.cos(angles), np.sin(angles)
+
+    segs, colors, lws = [], [], []
+    for i in range(m):
+        for j in range(i + 1, m):
+            if t <= 0:
+                cls = classify_edge(i, j, n)
+                if not keep(cls):
+                    continue
+                rgba, lw = CLASS_RGBA[cls], CLASS_LW[cls]
+            elif j == n:  # budding vertex's edges: fade in
+                cls = classify_edge(i, j, n + 1)
+                r, g, b, a = CLASS_RGBA[cls]
+                rgba, lw = (r, g, b, a * t * keep(cls)), CLASS_LW[cls]
+            else:  # crossfade between the K_n and K_{n+1} classifications
+                c0, c1 = classify_edge(i, j, n), classify_edge(i, j, n + 1)
+                (r0, g0, b0, a0), (r1, g1, b1, a1) = CLASS_RGBA[c0], CLASS_RGBA[c1]
+                u = 1.0 - t
+                rgba = (u * r0 + t * r1, u * g0 + t * g1, u * b0 + t * b1,
+                        u * a0 * keep(c0) + t * a1 * keep(c1))
+                lw = u * CLASS_LW[c0] + t * CLASS_LW[c1]
+            if rgba[3] < 0.01:
+                continue
+            segs.append([(xs[i], ys[i]), (xs[j], ys[j])])
+            colors.append(rgba)
+            lws.append(lw)
+
+    verts = np.column_stack([xs, ys])
+    vcolors = [VERTEX_RGBA] * m
+    if t > 0:
+        r, g, b, a = VERTEX_RGBA
+        vcolors[n] = (r, g, b, a * t)
+    return segs, colors, lws, verts, vcolors
+
+
+def _morph_schedule(n_min, n_max, hold, steps):
+    """(n, t) frame schedule: hold each K_n, ease into K_{n+1}, then ping-pong
+    back down so the repeating loop has no jump cut."""
+    forward = []
+    for n in range(n_min, n_max):
+        forward += [(n, 0.0)] * hold
+        forward += [(n, _smoothstep(k / steps)) for k in range(1, steps)]
+    forward += [(n_max, 0.0)] * hold
+    backward = forward[::-1]
+    if hold and len(backward) > 2 * hold:
+        backward = backward[hold:-hold]  # avoid double-length pauses at the turnarounds
+    return forward + backward
+
+
+def _make_morph_panel(ax):
+    """Persistent artists for one morph panel; frames update data, never clear."""
+    ax.set_xlim(-1.15, 1.15)
+    ax.set_ylim(-1.15, 1.15)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    lc = LineCollection([])
+    ax.add_collection(lc)
+    pts = ax.scatter([], [], s=50, zorder=3)
+    return lc, pts
+
+
+def _apply_morph_frame(ax, lc, pts, n, t, mode="full", label=None):
+    segs, colors, lws, verts, vcolors = morph_frame(n, t, mode)
+    lc.set_segments(segs)
+    lc.set_colors(colors)
+    lc.set_linewidths(lws)
+    pts.set_offsets(verts)
+    pts.set_facecolors(vcolors)
+    if label is not None:
+        title = f"{label} (n={n})" if t <= 0 else f"{label} (n={n}→{n + 1})"
+    else:
+        title = kn_title(n) if t <= 0 else f"K_{n} → K_{n + 1}"
+    ax.set_title(title, fontsize=10)
+
+
+def _morph_animation(fig, panels, n_min, n_max, interval, hold, steps):
+    """Drive one or more (ax, mode, label) panels through the morph schedule."""
+    artists = [_make_morph_panel(ax) for ax, _, _ in panels]
+    schedule = _morph_schedule(n_min, n_max, hold, steps) or [(n_min, 0.0)]
+
+    def update(frame):
+        n, t = schedule[frame % len(schedule)]
+        for (ax, mode, label), (lc, pts) in zip(panels, artists):
+            _apply_morph_frame(ax, lc, pts, n, t, mode, label)
+
+    return FuncAnimation(fig, update, frames=len(schedule),
+                         interval=interval, repeat=True)
+
+
+def _save_or_show(anim, save, interval):
+    """Show the animation window, or export it when --save was given."""
+    if save is None:
+        plt.show()
+        return
+    fps = max(1, round(1000 / interval))
+    writer = (PillowWriter(fps=fps) if save.lower().endswith(".gif")
+              else FFMpegWriter(fps=fps))
+    try:
+        anim.save(save, writer=writer, dpi=100)
+    except (FileNotFoundError, RuntimeError) as e:
+        print(f"Could not save {save}: {e}\n"
+              "If ffmpeg is missing, try a .gif filename (uses Pillow instead).")
+        return
+    print(f"Saved {save} ({fps} fps)")
 
 
 # ---------------------------------------------------------------- commands
@@ -143,36 +286,46 @@ def cmd_inversion(n):
     plt.show()
 
 
-def cmd_animate_inversion(n_min, n_max, interval=600):
+def cmd_animate_inversion(n_min, n_max, interval=600, smooth=False, save=None,
+                          hold=MORPH_HOLD, steps=MORPH_STEPS):
     """Animated §3.3 stress test: the three panels evolve side by side over n."""
     fig, axes = plt.subplots(1, 3, figsize=(13, 4.5))
     fig.suptitle(INVERSION_SUPTITLE, fontsize=11)
+    panels = [(ax, mode, label) for ax, (mode, label) in zip(axes, INVERSION_PANELS)]
 
-    def update(frame):
-        n = n_min + (frame % (n_max - n_min + 1))
-        for ax, (mode, label) in zip(axes, INVERSION_PANELS):
-            ax.clear()
-            draw_kn(ax, n, mode, title=f"{label} (n={n})")
+    if smooth:
+        anim = _morph_animation(fig, panels, n_min, n_max, interval, hold, steps)
+    else:
+        def update(frame):
+            n = n_min + (frame % (n_max - n_min + 1))
+            for ax, mode, label in panels:
+                ax.clear()
+                draw_kn(ax, n, mode, title=f"{label} (n={n})")
 
-    anim = FuncAnimation(fig, update, frames=n_max - n_min + 1,
-                         interval=interval, repeat=True)
+        anim = FuncAnimation(fig, update, frames=n_max - n_min + 1,
+                             interval=interval, repeat=True)
     plt.tight_layout()
-    plt.show()
+    _save_or_show(anim, save, interval)
     return anim
 
 
-def cmd_animate(n_min, n_max, interval=600):
+def cmd_animate(n_min, n_max, interval=600, smooth=False, save=None,
+                hold=MORPH_HOLD, steps=MORPH_STEPS):
     """The original animation, upgraded with edge-class coloring."""
     fig, ax = plt.subplots(figsize=(6, 6))
 
-    def update(frame):
-        n = n_min + (frame % (n_max - n_min + 1))
-        ax.clear()
-        draw_kn(ax, n)
+    if smooth:
+        anim = _morph_animation(fig, [(ax, "full", None)], n_min, n_max,
+                                interval, hold, steps)
+    else:
+        def update(frame):
+            n = n_min + (frame % (n_max - n_min + 1))
+            ax.clear()
+            draw_kn(ax, n)
 
-    anim = FuncAnimation(fig, update, frames=n_max - n_min + 1,
-                         interval=interval, repeat=True)
-    plt.show()
+        anim = FuncAnimation(fig, update, frames=n_max - n_min + 1,
+                             interval=interval, repeat=True)
+    _save_or_show(anim, save, interval)
     return anim
 
 
@@ -191,13 +344,39 @@ def main():
                    help="animate K_MIN through K_MAX")
     p.add_argument("--animate-inversion", nargs=2, type=int, metavar=("MIN", "MAX"),
                    help="animated 3-panel inversion test for K_MIN through K_MAX")
+    p.add_argument("--smooth", action="store_true",
+                   help="morph continuously between n values "
+                        "(with --animate/--animate-inversion)")
+    p.add_argument("--save", metavar="FILE",
+                   help="save the animation to FILE (.gif or .mp4) instead of showing it")
     p.add_argument("--interval", type=int, default=None, metavar="MS",
-                   help="animation frame interval in ms (default: 600, "
-                        "only applies with --animate/--animate-inversion)")
+                   help="animation frame interval in ms (default: 600, or 40 with "
+                        "--smooth; only applies with --animate/--animate-inversion)")
+    p.add_argument("--hold", type=int, default=None, metavar="FRAMES",
+                   help=f"frames held at each n with --smooth (default: {MORPH_HOLD})")
+    p.add_argument("--steps", type=int, default=None, metavar="FRAMES",
+                   help=f"frames per morph transition with --smooth (default: {MORPH_STEPS})")
     args = p.parse_args()
 
-    if args.interval is not None and not (args.animate or args.animate_inversion):
+    animating = bool(args.animate or args.animate_inversion)
+    if args.interval is not None and not animating:
         p.error("--interval only applies with --animate or --animate-inversion")
+    if (args.smooth or args.save) and not animating:
+        p.error("--smooth/--save only apply with --animate or --animate-inversion")
+    if (args.hold is not None or args.steps is not None) and not args.smooth:
+        p.error("--hold/--steps only apply with --smooth")
+    if args.steps is not None and args.steps < 1:
+        p.error("--steps must be >= 1")
+    if args.hold is not None and args.hold < 0:
+        p.error("--hold must be >= 0")
+
+    anim_kwargs = dict(
+        interval=args.interval or (40 if args.smooth else 600),
+        smooth=args.smooth,
+        save=args.save,
+        hold=args.hold if args.hold is not None else MORPH_HOLD,
+        steps=args.steps if args.steps is not None else MORPH_STEPS,
+    )
 
     try:
         if args.stats:
@@ -207,9 +386,9 @@ def main():
         elif args.inversion:
             cmd_inversion(args.inversion)
         elif args.animate:
-            cmd_animate(*args.animate, interval=args.interval or 600)
+            cmd_animate(*args.animate, **anim_kwargs)
         elif args.animate_inversion:
-            cmd_animate_inversion(*args.animate_inversion, interval=args.interval or 600)
+            cmd_animate_inversion(*args.animate_inversion, **anim_kwargs)
         else:
             cmd_stats(3, 16)  # sensible default
     except KeyboardInterrupt:
