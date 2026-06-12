@@ -12,6 +12,7 @@ Usage:
 """
 
 import argparse
+import math
 import os
 import textwrap
 
@@ -34,6 +35,19 @@ def _finish(fig, out, name, anim=None):
         fig.savefig(path, dpi=110, bbox_inches="tight")
         print(f"Saved {path}")
     plt.close(fig)
+
+
+def _equalize(ax, color="#534AB7", lw=1.6, alpha=0.85):
+    """Uniform edge styling for figures that assert *equal counts* — the
+    class styling (faint gray vs bold purple) would visually contradict
+    the equality the figure exists to show."""
+    for line in ax.lines:
+        line.set(color=color, linewidth=lw, alpha=alpha)
+
+
+def _gap_circle(ax, radius):
+    ax.add_patch(plt.Circle((0, 0), radius, fill=False, linestyle="--",
+                            edgecolor="#C2402A", linewidth=1.3))
 
 
 # ---------------------------------------------------------------- scenes
@@ -75,6 +89,20 @@ def scene_inversion_morph(out):
     _finish(fig, out, "04_inversion_morph.gif", anim=anim)
 
 
+def scene_gap_law(out):
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5.5))
+    gap7, hole8 = math.sin(math.pi / 14), math.sin(math.pi / 8)
+    ke.draw_kn(axes[0], 7, title=f"K_7 — predicted gap radius sin(π/14) ≈ {gap7:.2f}")
+    _gap_circle(axes[0], gap7)
+    ke.draw_kn(axes[1], 8, mode="noanti",
+               title=f"K_8 − diameters — predicted hole sin(π/8) ≈ {hole8:.2f}")
+    _gap_circle(axes[1], hole8)
+    fig.suptitle("Appendix A: the gap law — a class-k chord sits at cos(πk/n) "
+                 "from the center", fontsize=11)
+    plt.tight_layout()
+    _finish(fig, out, "05_gap_law.png")
+
+
 def scene_balance(out):
     ke.cmd_stats(3, 12)
     print()
@@ -84,16 +112,31 @@ def scene_balance(out):
     fig.suptitle("§3.5  The only balanced K_n: 5 (odd family) and 6 (even family)",
                  fontsize=11)
     plt.tight_layout()
-    _finish(fig, out, "05_balance_points.png")
+    _finish(fig, out, "06_balance_points.png")
 
 
 def scene_pentagon_pentagram(out):
     fig, axes = plt.subplots(1, 2, figsize=(11, 5.5))
     ke.draw_kn(axes[0], 5, mode="adjonly", title="pentagon: the 5 adjacent edges")
     ke.draw_kn(axes[1], 5, mode="inneronly", title="pentagram: the 5 inner edges")
+    for ax in axes:
+        _equalize(ax)
     fig.suptitle("§3.5  K_5 splits its boundary and interior 5 + 5", fontsize=11)
     plt.tight_layout()
-    _finish(fig, out, "06_pentagon_pentagram.png")
+    _finish(fig, out, "07_pentagon_pentagram.png")
+
+
+def scene_k6_decomposition(out):
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4.5))
+    ke.draw_kn(axes[0], 6, mode="adjonly", title="hexagon: 6 adjacent edges")
+    ke.draw_kn(axes[1], 6, mode="inneronly", title="inner: 6 edges")
+    ke.draw_kn(axes[2], 6, mode="antionly", title="diameters: 3 edges")
+    _equalize(axes[0])
+    _equalize(axes[1])
+    fig.suptitle("§3.5  K_6 splits 15 edges as 6 + 6 + 3 — inner equals adjacent",
+                 fontsize=11)
+    plt.tight_layout()
+    _finish(fig, out, "08_k6_decomposition.png")
 
 
 def scene_random_palette(out):
@@ -104,7 +147,7 @@ def scene_random_palette(out):
     anim = ke._morph_animation(fig, [(ax, "full", None)], 4, 8,
                                GIF_INTERVAL, ke.MORPH_HOLD, ke.MORPH_STEPS,
                                random_colors=True)
-    _finish(fig, out, "07_random_palette.gif", anim=anim)
+    _finish(fig, out, "09_random_palette.gif", anim=anim)
 
 
 SCENES = [
@@ -135,11 +178,14 @@ SCENES = [
      """
      Hypothesis at this point: "antipodality fills the center." The
      inversion operator attacks it: remove exactly the antipodal chords -
-     the center should empty. It does not. Non-antipodal inner chords pass
-     near the center in quantity, so even-n centers still partially fill.
-     Antipodal chords alone give a sparse star, not a filled region. The
-     claim is upgraded, not destroyed: antipodality is necessary but not
-     sufficient. Filled centers are two mechanisms superposed.
+     the center should empty. At n = 8 it largely does: the middle panel
+     has an open central hole. The original session read this panel as
+     "still partially fills"; the v0.2 gap law shows that reading belongs
+     to the large-n regime, where the hole shrinks like pi/n and
+     near-center crossing density (C(n,4)-driven) climbs. The conclusion
+     stands either way: antipodality is necessary but not sufficient, and
+     the filled center is two mechanisms superposed - exact central
+     crossings plus near-center density.
      """,
      scene_inversion_static),
 
@@ -150,6 +196,18 @@ SCENES = [
      section 3.2, watched in real time.
      """,
      scene_inversion_morph),
+
+    ("The gap law (v0.2 addendum, Appendix A)",
+     """
+     A chord connecting points k steps apart sits at distance cos(pi*k/n)
+     from the center, so the empty region is predictable exactly: odd-n
+     gap radius sin(pi/(2n)), and with diameters removed from even K_n, a
+     hole of radius sin(pi/n) - at small n roughly twice the gap of the
+     odd neighbors. The dashed circles are the predictions; the renderings
+     fill everything outside them. This formula did to section 3.3 what
+     section 3.3 did to section 3.2.
+     """,
+     scene_gap_law),
 
     ("The balance theorem (sections 3.4-3.5)",
      """
@@ -171,9 +229,20 @@ SCENES = [
      interior pentagram carry exactly equal edge weight, 5 and 5. The
      sensation - reported across cultures for millennia - that the
      pentagram is "complete" or "in equilibrium" has a literal
-     combinatorial referent.
+     combinatorial referent. Both panels are drawn with identical styling
+     because the point is the equality.
      """,
      scene_pentagon_pentagram),
+
+    ("The K_6 decomposition (section 3.5)",
+     """
+     The even balance point has the same structural reading: K_6 splits
+     its 15 edges as hexagon 6 + inner 6 + diameters 3. Inner equals
+     adjacent here too - the hexagram is the even family's last balanced
+     graph, with the three diameters as the parity surplus the odd family
+     never has.
+     """,
+     scene_k6_decomposition),
 
     ("The Ramsey overclaim and the open questions (sections 3.6, 5)",
      """
@@ -194,8 +263,8 @@ SCENES = [
      """
      Every figure above is regenerable from kn_explorer.py - stats tables,
      static class views, the inversion panels, smooth morphs, GIF export,
-     and a per-edge random palette (shown here) for generating perception-
-     study stimuli for the open question in section 5.
+     and a per-edge random palette (shown here) for generating
+     perception-study stimuli for the open question in section 5.
      """,
      scene_random_palette),
 ]

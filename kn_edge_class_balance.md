@@ -2,7 +2,7 @@
 
 **From Sacred Geometry to a Uniqueness Proof — and the Wrong Turns In Between**
 
-*Draft v0.1 — June 2026*
+*Draft v0.2 — June 2026*
 
 ---
 
@@ -68,6 +68,8 @@ The hypothesis was upgraded, not destroyed: antipodality is **necessary but not 
 
 *Navigation note:* inversion did exactly what it is for. It did not falsify the claim; it **located the load-bearing part** and separated mechanism from correlate. This is the session's cleanest example of an operator producing knowledge that passive exploration would not have.
 
+*Quantitative addendum (v0.2).* A chord connecting points k steps apart sits at distance cos(πk/n) from the center. This makes the panel observations exact — and qualifies one of them. With the diameters removed from even K_n, the innermost remaining class is k = n/2 − 1, at distance sin(π/n): for small n this is a hole *larger* than the natural gap of the neighboring odd graphs (K₆: 0.50, K₈: 0.38, versus K₇: 0.22, K₉: 0.17), so at small n the original prediction — removal empties the center — holds rather well, and the "still partially fills" reading above is accurate only as n grows, when sin(π/n) shrinks while near-center crossing density (C(n,4)-driven) rises. The formula does to this section what this section did to §3.2: it separates the mechanism from the visual impression and locates where the impression is reliable.
+
 ### 3.4 The human catches the AI's error (move: external correction)
 
 Asked to extract further patterns, the AI produced a table of edge counts and asserted that K₅ is the *unique* balance point where inner edge count equals outer (adjacent) edge count — and explicitly "corrected" the human's observation that K₆ also balances.
@@ -106,6 +108,8 @@ On audit — prompted by the human's request to re-read the entire session — t
 
 *Navigation note:* this drift event has a recognizable signature — **resolution hunger**. The session was approaching its end; a connection to a famous theorem offered a satisfying landing; the AI took it. The audit caught it only because auditing was an explicit, requested move. The lesson is uncomfortable but useful: the strength of a conclusion's *narrative* fit is not evidence, and the pull toward profound endings intensifies precisely when a session is going well.
 
+*Quantitative addendum (v0.2).* The companion visualizer now exhibits the layout-dependence dynamically: it realizes the whole K_n family as one continuous deformation (vertex k at angle 2πk/(n+t), t ∈ [0,1]), and along that deformation an edge's class changes while its endpoint pair does not — edge (0, n−1) is adjacent in K_n and inner the moment the new vertex inserts. Edge classes are properties of the embedding, not of the abstract graph; that is precisely the fact that separates them from layout-independent Ramsey properties.
+
 ## 4. What the Trajectory Teaches About Navigation
 
 Extracting from one session, with appropriate modesty:
@@ -126,15 +130,15 @@ Extracting from one session, with appropriate modesty:
 
 **The Ramsey coincidence.** Is there any non-accidental connection between the edge-class balance points (n = 5, 6) and R(3,3) = 6? A real connection would need to survive changing the drawing (the balance result is layout-dependent in its *meaning* though not its arithmetic) or would need to derive both from a common combinatorial source. We currently believe it is a coincidence and would welcome a proof either way.
 
-**Perceptual correlates.** Does the K₅ balance point predict anything measurable about perception — e.g., do subjects rate the pentagram as more "complete" or "stable" than star polygons of nearby n, and does the rating track the inner/adjacent ratio? This is an empirical question and the visualizer can generate stimuli for it.
+**Perceptual correlates.** Does the K₅ balance point predict anything measurable about perception — e.g., do subjects rate the pentagram as more "complete" or "stable" than star polygons of nearby n, and does the rating track the inner/adjacent ratio? This is an empirical question and the visualizer can generate stimuli for it. The gap law sharpens it into a design: the odd-n central gap has radius sin(π/(2n)) ≈ π/(2n), so the structural parity dichotomy is absolute while its perceptual signal fades on a 1/n law — parity discrimination should degrade with n and fail where the gap drops below visual acuity, a measurable threshold. The visualizer's seeded random palettes (`--random-colors --seed`) give reproducible stimulus sets.
 
-**Other layouts.** The taxonomy is defined by the circular drawing. What are the analogous edge classes and balance points for other vertex-transitive layouts (e.g., points on a sphere, on two concentric circles)?
+**Other layouts.** The taxonomy is defined by the circular drawing. What are the analogous edge classes and balance points for other vertex-transitive layouts (e.g., points on a sphere, on two concentric circles)? A candidate transferable definition: classify edges by their distance-from-center spectrum — on the circle this is cos(πk/n), with "antipodal" as the zero of the spectrum and "adjacent" as its maximum — and ask which layouts produce balance points between the spectrum's extremes and its interior.
 
 **Navigation generality.** This paper is one data point. The geo hypothesis predicts that the failure signatures observed here (momentum errors, taxonomy decay, resolution hunger) recur across sessions and domains. The companion experiment log exists to test this.
 
 ## 6. Companion Artifact
 
-The visualizer (`kn_explorer.py`, this repository) reproduces every figure-generating computation in this paper: the original animation, edge-class isolation (the §3.3 inversion test), per-n statistics, and verification of the balance theorem over any range. Every number in §3.5's table is regenerable with `python kn_explorer.py --stats 3 20`.
+The visualizer (`kn_explorer.py`, this repository) reproduces every figure-generating computation in this paper: the original animation, edge-class isolation (the §3.3 inversion test), per-n statistics, and verification of the balance theorem over any range. Every number in §3.5's table is regenerable with `python kn_explorer.py --stats 3 20`. As of v0.2 the toolkit also provides smooth morphs between consecutive K_n (the continuous deformation of §3.6's addendum), deterministic GIF/MP4 export, and seeded random palettes; a guided walkthrough lives in `DEMO.md`.
 
 ## Appendix A: Formulas
 
@@ -146,6 +150,9 @@ For K_n on a circle, n ≥ 3:
 - Inner: n(n−3)/2 for odd n; n(n−4)/2 for even n
 - Interior chord crossings (general position): C(n,4) = n(n−1)(n−2)(n−3)/24
 - Chord length classes: ⌊n/2⌋, each forming a regular polygon or star
+- Distance of a class-k chord from the center (unit circle): cos(πk/n)
+- Central gap radius, odd n: sin(π/(2n)) ≈ π/(2n)
+- Central hole radius, even n with antipodal chords removed: sin(π/n)
 - Balance (inner = adjacent): n = 5 (odd, unique), n = 6 (even, unique)
 
 ## Appendix B: Provenance
@@ -155,3 +162,5 @@ This draft was produced collaboratively by a human author and Claude (Anthropic)
 ---
 
 *v0.1 — first draft. Known gaps: §4 generalizes from n=1 sessions; §5's perceptual question needs an experimental design; the historical material (Pythagorean pentad/hexad symbolism) was cut from this draft pending proper sourcing and belongs in a future §2.5.*
+
+*v0.2 — quantitative addenda from a later session building the companion demo: chord-center distance formula and gap laws (Appendix A), an n-dependence qualifier on §3.3's "still partially fills," the continuous-deformation exhibit of layout-dependence (§3.6), and a sharpened experimental design for §5's perceptual question. Session-record paragraphs in §3 are untouched; additions are marked as addenda. Working notes in `INSIGHTS.md`.*
