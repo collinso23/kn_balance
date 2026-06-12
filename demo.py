@@ -97,6 +97,9 @@ def scene_pentagon_pentagram(out):
 
 
 def scene_random_palette(out):
+    # Seeded so reruns reproduce the committed GIF byte-for-byte instead of
+    # bloating git history with a fresh 2 MB palette every regeneration.
+    ke.seed_random_colors(56)
     fig, ax = plt.subplots(figsize=(6, 6))
     anim = ke._morph_animation(fig, [(ax, "full", None)], 4, 8,
                                GIF_INTERVAL, ke.MORPH_HOLD, ke.MORPH_STEPS,

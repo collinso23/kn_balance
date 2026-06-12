@@ -34,11 +34,10 @@ python kn_explorer.py --show 8 --random-colors  # random color per edge (any vie
 ## Demo
 
 A guided walkthrough of the paper's argument, figure by figure, lives in
-[`DEMO.md`](DEMO.md). The images it references are generated locally (they are
-not committed):
+[`DEMO.md`](DEMO.md), with its figures and animations committed under `demo/`.
 
 ```bash
-python demo.py          # writes all figures/animations to demo/
+python demo.py          # regenerates all of demo/ (deterministic: reruns are byte-identical)
 python demo.py --tour   # live version: narrative + figures, close each window to advance
 ```
 

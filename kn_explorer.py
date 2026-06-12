@@ -19,6 +19,7 @@ Usage:
   python kn_explorer.py --animate 3 12 --smooth   # smooth morphing between n values
   python kn_explorer.py --animate-inversion 3 12 --smooth --save morph.gif
   python kn_explorer.py --show 8 --random-colors  # random color per edge
+  python kn_explorer.py --show 8 --random-colors --seed 42  # reproducible palette
 """
 
 import argparse
@@ -93,6 +94,14 @@ def kn_title(n):
 
 _random_color_rng = np.random.default_rng()
 _random_color_cache = {}
+
+
+def seed_random_colors(seed):
+    """Make the random palette reproducible: reseed the RNG and drop cached
+    colors. Draw order is deterministic, so a fixed seed fixes the palette."""
+    global _random_color_rng
+    _random_color_rng = np.random.default_rng(seed)
+    _random_color_cache.clear()
 
 
 def random_edge_color(i, j):
@@ -384,6 +393,8 @@ def main():
     p.add_argument("--random-colors", action="store_true",
                    help="give every edge its own random color (instead of the "
                         "class palette); new palette each run")
+    p.add_argument("--seed", type=int, default=None, metavar="N",
+                   help="make the --random-colors palette reproducible")
     args = p.parse_args()
 
     animating = bool(args.animate or args.animate_inversion)
@@ -400,6 +411,10 @@ def main():
     if args.random_colors and not (animating or args.show or args.inversion):
         p.error("--random-colors only applies with "
                 "--show/--inversion/--animate/--animate-inversion")
+    if args.seed is not None and not args.random_colors:
+        p.error("--seed only applies with --random-colors")
+    if args.seed is not None:
+        seed_random_colors(args.seed)
 
     anim_kwargs = dict(
         interval=args.interval or (40 if args.smooth else 600),
