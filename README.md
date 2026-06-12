@@ -31,6 +31,17 @@ python kn_explorer.py --animate-inversion 3 12 --smooth --save morph.gif  # expo
 python kn_explorer.py --show 8 --random-colors  # random color per edge (any view)
 ```
 
+## Demo
+
+A guided walkthrough of the paper's argument, figure by figure, lives in
+[`DEMO.md`](DEMO.md). The images it references are generated locally (they are
+not committed):
+
+```bash
+python demo.py          # writes all figures/animations to demo/
+python demo.py --tour   # live version: narrative + figures, close each window to advance
+```
+
 ## Status
 
 Paper draft v0.1. Open questions in §5 of the paper. This work originated as
