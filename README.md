@@ -28,6 +28,7 @@ python kn_explorer.py --animate 3 12    # the original animation
 python kn_explorer.py --animate-inversion 3 12  # the §3.3 panels, animated over n
 python kn_explorer.py --animate 3 12 --smooth   # morph smoothly between n values
 python kn_explorer.py --animate-inversion 3 12 --smooth --save morph.gif  # export
+python kn_explorer.py --show 8 --random-colors  # random color per edge (any view)
 ```
 
 ## Status

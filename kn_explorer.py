@@ -18,6 +18,7 @@ Usage:
   python kn_explorer.py --animate-inversion 3 12  # animated 3-panel stress test
   python kn_explorer.py --animate 3 12 --smooth   # smooth morphing between n values
   python kn_explorer.py --animate-inversion 3 12 --smooth --save morph.gif
+  python kn_explorer.py --show 8 --random-colors  # random color per edge
 """
 
 import argparse
@@ -25,7 +26,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter, FFMpegWriter
 from matplotlib.collections import LineCollection
-from matplotlib.colors import to_rgba
+from matplotlib.colors import to_rgba, hsv_to_rgb
 
 # ---------------------------------------------------------------- taxonomy
 
@@ -90,7 +91,23 @@ def kn_title(n):
     return f"K_{n}  adj={c['adjacent']} anti={c['antipodal']} inner={c['inner']}{flag}"
 
 
-def draw_kn(ax, n, mode="full", title=None):
+_random_color_rng = np.random.default_rng()
+_random_color_cache = {}
+
+
+def random_edge_color(i, j):
+    """Random RGB for edge (i, j): a fresh palette each run, but cached so an
+    edge keeps its color across frames, panels, and morph transitions.
+    HSV-sampled to avoid the muddy/near-black colors uniform RGB produces."""
+    if (i, j) not in _random_color_cache:
+        hsv = (_random_color_rng.random(),
+               0.55 + 0.35 * _random_color_rng.random(),
+               0.65 + 0.30 * _random_color_rng.random())
+        _random_color_cache[(i, j)] = tuple(hsv_to_rgb(hsv))
+    return _random_color_cache[(i, j)]
+
+
+def draw_kn(ax, n, mode="full", title=None, random_colors=False):
     """Draw K_n on ax with edge-class coloring, filtered by mode."""
     keep = MODES[mode]
     angles = np.linspace(0, 2 * np.pi, n, endpoint=False) - np.pi / 2
@@ -100,7 +117,10 @@ def draw_kn(ax, n, mode="full", title=None):
         for j in range(i + 1, n):
             cls = classify_edge(i, j, n)
             if keep(cls):
-                ax.plot([xs[i], xs[j]], [ys[i], ys[j]], **STYLE[cls])
+                style = STYLE[cls]
+                if random_colors:
+                    style = {**style, "color": random_edge_color(i, j)}
+                ax.plot([xs[i], xs[j]], [ys[i], ys[j]], **style)
 
     ax.scatter(xs, ys, s=50, color="#534AB7", zorder=3)
     ax.set_aspect("equal")
@@ -124,7 +144,7 @@ def _smoothstep(t):
     return t * t * (3.0 - 2.0 * t)
 
 
-def morph_frame(n, t, mode="full"):
+def morph_frame(n, t, mode="full", random_colors=False):
     """Segments, per-edge RGBA/linewidths, and vertex data for the K_n -> K_{n+1}
     morph at time t in [0, 1).
 
@@ -161,6 +181,8 @@ def morph_frame(n, t, mode="full"):
                 lw = u * CLASS_LW[c0] + t * CLASS_LW[c1]
             if rgba[3] < 0.01:
                 continue
+            if random_colors:  # fixed per-edge hue; only alpha follows the class logic
+                rgba = (*random_edge_color(i, j), rgba[3])
             segs.append([(xs[i], ys[i]), (xs[j], ys[j])])
             colors.append(rgba)
             lws.append(lw)
@@ -199,8 +221,8 @@ def _make_morph_panel(ax):
     return lc, pts
 
 
-def _apply_morph_frame(ax, lc, pts, n, t, mode="full", label=None):
-    segs, colors, lws, verts, vcolors = morph_frame(n, t, mode)
+def _apply_morph_frame(ax, lc, pts, n, t, mode="full", label=None, random_colors=False):
+    segs, colors, lws, verts, vcolors = morph_frame(n, t, mode, random_colors)
     lc.set_segments(segs)
     lc.set_colors(colors)
     lc.set_linewidths(lws)
@@ -213,7 +235,8 @@ def _apply_morph_frame(ax, lc, pts, n, t, mode="full", label=None):
     ax.set_title(title, fontsize=10)
 
 
-def _morph_animation(fig, panels, n_min, n_max, interval, hold, steps):
+def _morph_animation(fig, panels, n_min, n_max, interval, hold, steps,
+                     random_colors=False):
     """Drive one or more (ax, mode, label) panels through the morph schedule."""
     artists = [_make_morph_panel(ax) for ax, _, _ in panels]
     schedule = _morph_schedule(n_min, n_max, hold, steps) or [(n_min, 0.0)]
@@ -221,7 +244,7 @@ def _morph_animation(fig, panels, n_min, n_max, interval, hold, steps):
     def update(frame):
         n, t = schedule[frame % len(schedule)]
         for (ax, mode, label), (lc, pts) in zip(panels, artists):
-            _apply_morph_frame(ax, lc, pts, n, t, mode, label)
+            _apply_morph_frame(ax, lc, pts, n, t, mode, label, random_colors)
 
     return FuncAnimation(fig, update, frames=len(schedule),
                          interval=interval, repeat=True)
@@ -262,9 +285,9 @@ def cmd_stats(n_min, n_max):
     print(f"\nTheorem scan n=3..10000: balanced at {balanced}  ({result})")
 
 
-def cmd_show(n, mode):
+def cmd_show(n, mode, random_colors=False):
     fig, ax = plt.subplots(figsize=(6, 6))
-    draw_kn(ax, n, mode)
+    draw_kn(ax, n, mode, random_colors=random_colors)
     plt.show()
 
 
@@ -276,31 +299,33 @@ INVERSION_PANELS = [
 INVERSION_SUPTITLE = "Inversion stress test: is antipodality the mechanism?"
 
 
-def cmd_inversion(n):
+def cmd_inversion(n, random_colors=False):
     """The §3.3 stress test: full / antipodal-removed / antipodal-only."""
     fig, axes = plt.subplots(1, 3, figsize=(13, 4.5))
     for ax, (mode, label) in zip(axes, INVERSION_PANELS):
-        draw_kn(ax, n, mode, title=f"{label} (n={n})")
+        draw_kn(ax, n, mode, title=f"{label} (n={n})", random_colors=random_colors)
     fig.suptitle(INVERSION_SUPTITLE, fontsize=11)
     plt.tight_layout()
     plt.show()
 
 
 def cmd_animate_inversion(n_min, n_max, interval=600, smooth=False, save=None,
-                          hold=MORPH_HOLD, steps=MORPH_STEPS):
+                          hold=MORPH_HOLD, steps=MORPH_STEPS, random_colors=False):
     """Animated §3.3 stress test: the three panels evolve side by side over n."""
     fig, axes = plt.subplots(1, 3, figsize=(13, 4.5))
     fig.suptitle(INVERSION_SUPTITLE, fontsize=11)
     panels = [(ax, mode, label) for ax, (mode, label) in zip(axes, INVERSION_PANELS)]
 
     if smooth:
-        anim = _morph_animation(fig, panels, n_min, n_max, interval, hold, steps)
+        anim = _morph_animation(fig, panels, n_min, n_max, interval, hold, steps,
+                                random_colors)
     else:
         def update(frame):
             n = n_min + (frame % (n_max - n_min + 1))
             for ax, mode, label in panels:
                 ax.clear()
-                draw_kn(ax, n, mode, title=f"{label} (n={n})")
+                draw_kn(ax, n, mode, title=f"{label} (n={n})",
+                        random_colors=random_colors)
 
         anim = FuncAnimation(fig, update, frames=n_max - n_min + 1,
                              interval=interval, repeat=True)
@@ -310,18 +335,18 @@ def cmd_animate_inversion(n_min, n_max, interval=600, smooth=False, save=None,
 
 
 def cmd_animate(n_min, n_max, interval=600, smooth=False, save=None,
-                hold=MORPH_HOLD, steps=MORPH_STEPS):
+                hold=MORPH_HOLD, steps=MORPH_STEPS, random_colors=False):
     """The original animation, upgraded with edge-class coloring."""
     fig, ax = plt.subplots(figsize=(6, 6))
 
     if smooth:
         anim = _morph_animation(fig, [(ax, "full", None)], n_min, n_max,
-                                interval, hold, steps)
+                                interval, hold, steps, random_colors)
     else:
         def update(frame):
             n = n_min + (frame % (n_max - n_min + 1))
             ax.clear()
-            draw_kn(ax, n)
+            draw_kn(ax, n, random_colors=random_colors)
 
         anim = FuncAnimation(fig, update, frames=n_max - n_min + 1,
                              interval=interval, repeat=True)
@@ -356,6 +381,9 @@ def main():
                    help=f"frames held at each n with --smooth (default: {MORPH_HOLD})")
     p.add_argument("--steps", type=int, default=None, metavar="FRAMES",
                    help=f"frames per morph transition with --smooth (default: {MORPH_STEPS})")
+    p.add_argument("--random-colors", action="store_true",
+                   help="give every edge its own random color (instead of the "
+                        "class palette); new palette each run")
     args = p.parse_args()
 
     animating = bool(args.animate or args.animate_inversion)
@@ -369,6 +397,9 @@ def main():
         p.error("--steps must be >= 1")
     if args.hold is not None and args.hold < 0:
         p.error("--hold must be >= 0")
+    if args.random_colors and not (animating or args.show or args.inversion):
+        p.error("--random-colors only applies with "
+                "--show/--inversion/--animate/--animate-inversion")
 
     anim_kwargs = dict(
         interval=args.interval or (40 if args.smooth else 600),
@@ -376,15 +407,16 @@ def main():
         save=args.save,
         hold=args.hold if args.hold is not None else MORPH_HOLD,
         steps=args.steps if args.steps is not None else MORPH_STEPS,
+        random_colors=args.random_colors,
     )
 
     try:
         if args.stats:
             cmd_stats(*args.stats)
         elif args.show:
-            cmd_show(args.show, args.mode)
+            cmd_show(args.show, args.mode, random_colors=args.random_colors)
         elif args.inversion:
-            cmd_inversion(args.inversion)
+            cmd_inversion(args.inversion, random_colors=args.random_colors)
         elif args.animate:
             cmd_animate(*args.animate, **anim_kwargs)
         elif args.animate_inversion:
